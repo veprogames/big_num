@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 enum Big {
     Number(BigData),
     NaN,
@@ -8,7 +8,7 @@ enum Big {
     Zero,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct BigData {
     m: f64,
     e: i64,
@@ -52,7 +52,7 @@ impl Big {
                     }
                 }
 
-                data.m *= 10.0_f64.powi(log as i32);
+                data.m /= 10.0_f64.powi(log as i32);
 
                 self
             }
@@ -85,6 +85,42 @@ impl Big {
 
     pub fn is_zero(&self) -> bool {
         self == &Big::Zero
+    }
+}
+
+// arithmetic
+
+impl Big {
+    pub fn add(&self, other: &Self) -> Self {
+        match (self, other) {
+            // Infinity
+            (Self::Infinity, Self::Infinity | Self::Number(_) | Self::Zero) => Self::Infinity,
+            (Self::Number(_) | Self::Zero, Self::Infinity) => Self::Infinity,
+            
+            // NaN
+            (Self::NaN, _) | (_, Self::NaN) => Self::NaN,
+            
+            // Zero
+            (Self::Zero, Self::Number(_)) => other.clone(),
+            (Self::Number(_), Self::Zero) => self.clone(),
+            (Self::Zero, Self::Zero) => Self::Zero,
+
+            // a + b
+            (Self::Number(self_data), Self::Number(other_data)) => {
+                let delta = other_data.e - self_data.e;
+
+                match delta {
+                    ..=-14 => self.clone(),
+                    14.. => other.clone(),
+                    delta => {
+                        let m = self_data.m + other_data.m * 10.0_f64.powi(delta as i32);
+                        let e = self_data.e;
+                        Big::new(m, e)
+                    }
+                }
+            }
+
+        }
     }
 }
 
@@ -147,9 +183,10 @@ mod tests {
         assert_eq!(zero, Big::Zero);
 
         // from f64
-        let _: Big = 0.0_f64.into();
         let _: Big = f64::MIN_POSITIVE.into();
         let _: Big = f64::MAX.into();
+        let zero: Big = 0.0_f64.into();
+        assert!(zero.is_zero());
         let nan: Big = f64::NAN.into();
         assert!(nan.is_nan());
         let inf: Big = f64::INFINITY.into();
@@ -159,12 +196,33 @@ mod tests {
     #[test]
     fn normalization() {
         let norm = Big::new(1234.5, 0);
+        assert_eq!(norm.m(), 1.2345);
         assert_eq!(norm.e(), 3);
 
         let norm = Big::new(-1234.5, 0);
+        assert_eq!(norm.m(), -1.2345);
         assert_eq!(norm.e(), 3);
 
         let norm = Big::new(0.001, 0);
+        assert_eq!(norm.m(), 1.0);
         assert_eq!(norm.e(), -3);
+    }
+
+    #[test]
+    fn addition() {
+        let a: Big = 5.0.into();
+        let b: Big = 8.0.into();
+        let b_neg: Big = (-8.0).into();
+        let c: Big = 1.5e42.into();
+
+        assert_eq!(a.add(&b), 13.0.into());
+        assert_eq!(a.add(&b_neg), (-3.0).into());
+        assert_eq!(a.add(&c), c);
+        assert_eq!(c.add(&a), c);
+        assert_eq!(a.add(&Big::Infinity), Big::Infinity);
+        assert_eq!(a.add(&Big::NaN), Big::NaN);
+        assert_eq!(a.add(&Big::Zero), a);
+        assert_eq!(a.add(&Big::Zero).add(&b).add(&b), 21.0.into());
+        assert_eq!(a.add(&Big::Zero).add(&b).add(&Big::NaN).add(&b), Big::NaN);
     }
 }
