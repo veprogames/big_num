@@ -22,6 +22,9 @@ pub struct BigData {
 
 pub const POS_INFINITY: Big = Big::Infinity(InfinityKind::Positive);
 pub const NEG_INFINITY: Big = Big::Infinity(InfinityKind::Negative);
+// declared as i64 because it makes casting unneeded when working
+// in the content of BigData::e, a i64
+const SIG_DIGITS: i64 = 15;
 
 impl Big {
     pub fn new(mantissa: f64, exponent: i64) -> Self {
@@ -127,8 +130,9 @@ impl Big {
                 let delta = other_data.e - self_data.e;
 
                 match delta {
-                    ..=-14 => self.clone(),
-                    14.. => other.clone(),
+                    // ..=-SIG_DIGITS produced a syntax error
+                    _delta if delta <= -SIG_DIGITS => self.clone(),
+                    _delta if delta >= SIG_DIGITS => other.clone(),
                     delta => {
                         let delta: i32 = delta.try_into()
                             .expect("exponent delta between a, b in a + b should never exceed 13
