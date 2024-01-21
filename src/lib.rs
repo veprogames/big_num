@@ -274,11 +274,14 @@ mod tests {
         let b: Big = 8.0.into();
         let b_neg: Big = (-8.0).into();
         let c: Big = 1.5e42.into();
+        let d: Big = Big::new(1.0, i64::MAX - 1);
 
         assert_eq!(a.add(&b), 13.0.into());
         assert_eq!(a.add(&b_neg), (-3.0).into());
         assert_eq!(a.add(&c), c);
         assert_eq!(c.add(&a), c);
+        assert_eq!(a.add(&d), d);
+        assert_eq!(d.add(&a), d);
         assert_eq!(a.add(&POS_INFINITY), POS_INFINITY);
         assert_eq!(a.add(&NEG_INFINITY), NEG_INFINITY);
         assert_eq!(a.add(&Big::NaN), Big::NaN);
