@@ -83,22 +83,6 @@ impl Big {
         }
     }
 
-    fn m(&self) -> f64{
-        if let Self::Number(BigData{m, e: _}) = self {
-            *m
-        } else {
-            panic!("self is {:?}", self);
-        }
-    }
-
-    fn e(&self) -> i64{
-        if let Self::Number(BigData{m: _, e}) = self {
-            *e
-        } else {
-            panic!("self is {:?}", self);
-        }
-    }
-
     pub fn is_nan(&self) -> bool {
         self == &Big::NaN
     }
@@ -213,6 +197,25 @@ impl Into<Big> for f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // methods for testing (mainly normalization)
+    impl Big {
+        fn m(&self) -> f64{
+            if let Self::Number(BigData{m, e: _}) = self {
+                *m
+            } else {
+                panic!("expected a valid mantissa but self is {:?}", self);
+            }
+        }
+    
+        fn e(&self) -> i64{
+            if let Self::Number(BigData{m: _, e}) = self {
+                *e
+            } else {
+                panic!("expected a valid exponent but self is {:?}", self);
+            }
+        }
+    }
 
     #[test]
     fn creation() {
