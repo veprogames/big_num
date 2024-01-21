@@ -108,6 +108,9 @@ impl Big {
 impl Big {
     pub fn add(self, other: Self) -> Self {
         match (self, other) {
+            // NaN
+            (Self::NaN, _) | (_, Self::NaN) => Self::NaN,
+
             // Infinities
 
             // +inf + -inf and -inf + +inf are undefined
@@ -116,9 +119,6 @@ impl Big {
 
             (Self::Infinity(kind), Self::Number(_) | Self::Zero) => Self::Infinity(kind),
             (Self::Number(_) | Self::Zero, Self::Infinity(kind)) => Self::Infinity(kind),
-            
-            // NaN
-            (Self::NaN, _) | (_, Self::NaN) => Self::NaN,
             
             // Zero
             (Self::Zero, Self::Number(_)) => other,
@@ -144,7 +144,58 @@ impl Big {
                     }
                 }
             }
+        }
+    }
 
+    pub fn mul(self, other: Self) -> Self {
+        match (self, other) {
+            // NaN
+            (Self::NaN, _) => Self::NaN,
+            (_, Self::NaN) => Self::NaN,
+
+            // Infinities
+
+            // Let's say +inf * -inf is NaN
+            (Self::Infinity(kind1), Self::Infinity(kind2)) if kind1 != kind2 => Self::NaN,
+            // But is (-inf)² = +inf and (inf)² = inf? Let us say it is NaN also
+            // To establish (-inf)² = (-inf)(inf) = NaN
+            (Self::Infinity(_), Self::Infinity(_)) => Self::NaN,
+            // obviously, multiplying inf with a normal number is inf
+            (Self::Infinity(kind), Self::Number(_)) => Self::Infinity(kind),
+            (Self::Number(_), Self::Infinity(kind)) => Self::Infinity(kind),
+
+            // Zeroes
+            (Self::Zero, _) => Self::Zero,
+            (_, Self::Zero) => Self::Zero,
+
+            // a * b
+            (Self::Number(data_self), Self::Number(data_other)) => {
+                let m = data_self.m * data_other.m;
+                
+                // This will need to be abstracted along with in normalized()
+                // Cannot easily pass through here
+                let possible_infinity_kind = if m.is_sign_positive() {
+                    InfinityKind::Positive
+                } else {
+                    InfinityKind::Negative
+                };
+                let e = match data_other.e.is_positive() {
+                    true => {
+                        match data_self.e.checked_add(data_other.e) {
+                            Some(e) => e,
+                            None => return Big::Infinity(possible_infinity_kind)
+                        }
+                    },
+                    false => {
+                        match data_self.e.checked_sub(-data_other.e) {
+                            Some(e) => e,
+                            None => return Big::Zero
+                        }
+                    }
+                };
+                
+                Big::new(m, e)
+            }
         }
     }
 }
@@ -290,5 +341,31 @@ mod tests {
         assert_eq!(a.add(Big::Zero).add(b).add(b), 21.0.into());
         assert_eq!(a.add(Big::Zero).add(b).add(Big::NaN).add(b), Big::NaN);
         assert_eq!(POS_INFINITY.add(NEG_INFINITY), Big::NaN);
+    }
+
+    #[test]
+    fn multiplication() {
+        let a: Big = 5.0.into();
+        let b: Big = 8.0.into();
+        let b_neg: Big = (-8.0).into();
+        let c: Big = 1e42.into();
+        let high: Big = Big::new(1.0, i64::MAX - 1);
+        let low: Big = Big::new(1.0, i64::MIN + 1);
+
+        assert_eq!(a.mul(b), 40.0.into());
+        assert_eq!(a.mul(b_neg), (-40.0).into());
+        assert_eq!(a.mul(c), 5.0e42.into());
+        assert_eq!(a.mul(c), c.mul(a));
+
+        assert_eq!(high.mul(1_000_000.0.into()), POS_INFINITY);
+        assert_eq!(high.mul((-1_000_000.0).into()), NEG_INFINITY);
+        assert_eq!(low.mul(0.000_001.into()), Big::Zero);
+
+        assert!(a.mul(Big::NaN).is_nan());
+        assert!(POS_INFINITY.mul(NEG_INFINITY).is_nan());
+        assert!(a.mul(0.0.into()).is_zero());
+        assert!(a.mul(POS_INFINITY).is_pos_inf());
+        assert!(a.mul(NEG_INFINITY).is_neg_inf());
+        assert!(POS_INFINITY.mul(POS_INFINITY).is_nan());
     }
 }
