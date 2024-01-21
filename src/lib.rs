@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Big {
     Number(BigData),
     NaN,
@@ -14,7 +14,7 @@ pub enum InfinityKind {
     Negative,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct BigData {
     m: f64,
     e: i64,
@@ -106,23 +106,23 @@ impl Big {
 // arithmetic
 
 impl Big {
-    pub fn add(&self, other: &Self) -> Self {
+    pub fn add(self, other: Self) -> Self {
         match (self, other) {
             // Infinities
 
             // +inf + -inf and -inf + +inf are undefined
             (Self::Infinity(kind), Self::Infinity(kind2)) if kind != kind2 => Self::NaN,
-            (Self::Infinity(kind), Self::Infinity(_)) => Self::Infinity(*kind),
+            (Self::Infinity(kind), Self::Infinity(_)) => Self::Infinity(kind),
 
-            (Self::Infinity(kind), Self::Number(_) | Self::Zero) => Self::Infinity(*kind),
-            (Self::Number(_) | Self::Zero, Self::Infinity(kind)) => Self::Infinity(*kind),
+            (Self::Infinity(kind), Self::Number(_) | Self::Zero) => Self::Infinity(kind),
+            (Self::Number(_) | Self::Zero, Self::Infinity(kind)) => Self::Infinity(kind),
             
             // NaN
             (Self::NaN, _) | (_, Self::NaN) => Self::NaN,
             
             // Zero
-            (Self::Zero, Self::Number(_)) => other.clone(),
-            (Self::Number(_), Self::Zero) => self.clone(),
+            (Self::Zero, Self::Number(_)) => other,
+            (Self::Number(_), Self::Zero) => self,
             (Self::Zero, Self::Zero) => Self::Zero,
 
             // a + b
@@ -131,8 +131,8 @@ impl Big {
 
                 match delta {
                     // ..=-SIG_DIGITS produced a syntax error
-                    _delta if delta <= -SIG_DIGITS => self.clone(),
-                    _delta if delta >= SIG_DIGITS => other.clone(),
+                    _delta if delta <= -SIG_DIGITS => self,
+                    _delta if delta >= SIG_DIGITS => other,
                     delta => {
                         let delta: i32 = delta.try_into()
                             .expect("exponent delta between a, b in a + b should never exceed 13
@@ -276,19 +276,19 @@ mod tests {
         let c: Big = 1.5e42.into();
         let d: Big = Big::new(1.0, i64::MAX - 1);
 
-        assert_eq!(a.add(&b), 13.0.into());
-        assert_eq!(a.add(&b_neg), (-3.0).into());
-        assert_eq!(a.add(&c), c);
-        assert_eq!(c.add(&a), c);
-        assert_eq!(a.add(&d), d);
-        assert_eq!(d.add(&a), d);
-        assert_eq!(a.add(&POS_INFINITY), POS_INFINITY);
-        assert_eq!(a.add(&NEG_INFINITY), NEG_INFINITY);
-        assert_eq!(a.add(&Big::NaN), Big::NaN);
-        assert_eq!(a.add(&Big::Zero), a);
-        assert_eq!(Big::Zero.add(&a), a);
-        assert_eq!(a.add(&Big::Zero).add(&b).add(&b), 21.0.into());
-        assert_eq!(a.add(&Big::Zero).add(&b).add(&Big::NaN).add(&b), Big::NaN);
-        assert_eq!(POS_INFINITY.add(&NEG_INFINITY), Big::NaN);
+        assert_eq!(a.add(b), 13.0.into());
+        assert_eq!(a.add(b_neg), (-3.0).into());
+        assert_eq!(a.add(c), c);
+        assert_eq!(c.add(a), c);
+        assert_eq!(a.add(d), d);
+        assert_eq!(d.add(a), d);
+        assert_eq!(a.add(POS_INFINITY), POS_INFINITY);
+        assert_eq!(a.add(NEG_INFINITY), NEG_INFINITY);
+        assert_eq!(a.add(Big::NaN), Big::NaN);
+        assert_eq!(a.add(Big::Zero), a);
+        assert_eq!(Big::Zero.add(a), a);
+        assert_eq!(a.add(Big::Zero).add(b).add(b), 21.0.into());
+        assert_eq!(a.add(Big::Zero).add(b).add(Big::NaN).add(b), Big::NaN);
+        assert_eq!(POS_INFINITY.add(NEG_INFINITY), Big::NaN);
     }
 }
