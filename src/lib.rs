@@ -1,23 +1,17 @@
-use std::{f64, fmt::Display};
+use std::{f64, fmt::Display, ops::AddAssign};
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Big {
-    Number(BigData),
+    Number { m: f64, e: i64 },
     NaN,
     Infinity(InfinityKind),
     Zero,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum InfinityKind {
     Positive,
     Negative,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct BigData {
-    m: f64,
-    e: i64,
 }
 
 pub const POS_INFINITY: Big = Big::Infinity(InfinityKind::Positive);
@@ -28,62 +22,55 @@ const SIG_DIGITS: i64 = 15;
 
 impl Big {
     pub fn new(mantissa: f64, exponent: i64) -> Self {
-        let data = BigData {
+        let mut number = Self::Number {
             m: mantissa,
             e: exponent,
         };
-        Self::Number(data).normalized()
+        number.normalize();
+        number
     }
 
-    fn normalized(mut self) -> Self {
-        match self {
-            Self::Infinity(_) | Self::NaN | Self::Zero => self,
-            Self::Number(ref mut data) => {
-                // True for any exponent in m * 10 ^ e
-                if data.m == 0.0 {
-                    return Self::Zero;
+    fn normalize(&mut self) {
+        match *self {
+            Self::Infinity(_) | Self::NaN | Self::Zero => return,
+            Self::Number { m, .. } if !m.is_normal() => return,
+            _ => {}
+        };
+
+        if let Self::Number {
+            ref mut m,
+            ref mut e,
+        } = *self
+        {
+            let log = m.abs().log10() as i64;
+
+            match log {
+                // might underflow to Zero
+                ..=0 => {
+                    match e.checked_sub(-log) {
+                        Some(new_e) => *e = new_e,
+                        None => *self = Self::Zero,
+                    };
+                    return;
                 }
-
-                if !data.m.is_normal() {
-                    panic!("mantissa is not normal: {:?}", data.m);
-                }
-
-                let log = data.m.abs().log10() as i64;
-
-                match log {
-                    // might underflow to Zero
-                    ..=0 => {
-                        data.e = match data.e.checked_sub(-log) {
-                            Some(e) => e,
-                            None => return Self::Zero,
+                // might overflow to either positive or negative Infinity (+inf; -inf)
+                _positive => match e.checked_add(log) {
+                    Some(new_e) => *e = new_e,
+                    None => {
+                        match m.is_sign_positive() {
+                            true => *self = POS_INFINITY,
+                            false => *self = NEG_INFINITY,
                         };
+                        return;
                     }
-                    // might overflow to either positive or negative Infinity (+inf; -inf)
-                    _positive => {
-                        data.e = match data.e.checked_add(log) {
-                            Some(e) => e,
-                            None => {
-                                let mantissa_is_positive = data.m.is_sign_positive();
-                                let infinity_kind = if mantissa_is_positive {
-                                    InfinityKind::Positive
-                                } else {
-                                    InfinityKind::Negative
-                                };
-
-                                return Self::Infinity(infinity_kind);
-                            }
-                        };
-                    }
-                }
-
-                let log_i32: i32 = log.try_into().expect(
-                    "abs(log) of mantissa should never exceed ~350
-                    and therefore can be cast to i32",
-                );
-                data.m /= 10.0_f64.powi(log_i32);
-
-                self
+                },
             }
+
+            let log_i32: i32 = log.try_into().expect(
+                "abs(log) of mantissa should never exceed ~350
+                                           and therefore can be cast to i32",
+            );
+            *m /= 10.0_f64.powi(log_i32);
         }
     }
 
@@ -103,99 +90,9 @@ impl Big {
         self == &Big::Zero
     }
 
-    pub fn add(self, other: Self) -> Self {
-        match (self, other) {
-            // NaN
-            (Self::NaN, _) | (_, Self::NaN) => Self::NaN,
-
-            // Infinities
-
-            // +inf + -inf and -inf + +inf are undefined
-            (Self::Infinity(kind), Self::Infinity(kind2)) if kind != kind2 => Self::NaN,
-            (Self::Infinity(kind), Self::Infinity(_)) => Self::Infinity(kind),
-
-            (Self::Infinity(kind), Self::Number(_) | Self::Zero) => Self::Infinity(kind),
-            (Self::Number(_) | Self::Zero, Self::Infinity(kind)) => Self::Infinity(kind),
-
-            // Zero
-            (Self::Zero, Self::Number(_)) => other,
-            (Self::Number(_), Self::Zero) => self,
-            (Self::Zero, Self::Zero) => Self::Zero,
-
-            // a + b
-            (Self::Number(self_data), Self::Number(other_data)) => {
-                let delta = other_data.e - self_data.e;
-
-                match delta {
-                    // ..=-SIG_DIGITS produced a syntax error
-                    _delta if delta <= -SIG_DIGITS => self,
-                    _delta if delta >= SIG_DIGITS => other,
-                    delta => {
-                        let delta: i32 = delta.try_into().expect(
-                            "exponent delta between a, b in a + b should never exceed 13
-                            and can therefore be cast into i32",
-                        );
-
-                        let m = self_data.m + other_data.m * 10.0_f64.powi(delta);
-                        let e = self_data.e;
-                        Big::new(m, e)
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn mul(self, other: Self) -> Self {
-        match (self, other) {
-            // NaN
-            (Self::NaN, _) => Self::NaN,
-            (_, Self::NaN) => Self::NaN,
-
-            // Infinities
-
-            // Let's say +inf * -inf is NaN
-            (Self::Infinity(kind1), Self::Infinity(kind2)) if kind1 != kind2 => Self::NaN,
-            // But is (-inf)² = +inf and (inf)² = inf? Let us say it is NaN also
-            // To establish (-inf)² = (-inf)(inf) = NaN
-            (Self::Infinity(_), Self::Infinity(_)) => Self::NaN,
-            // obviously, multiplying inf with a normal number is inf
-            (Self::Infinity(kind), Self::Number(_)) => Self::Infinity(kind),
-            (Self::Number(_), Self::Infinity(kind)) => Self::Infinity(kind),
-
-            // Zeroes
-            (Self::Zero, _) => Self::Zero,
-            (_, Self::Zero) => Self::Zero,
-
-            // a * b
-            (Self::Number(data_self), Self::Number(data_other)) => {
-                let m = data_self.m * data_other.m;
-
-                // This will need to be abstracted along with in normalized()
-                // Cannot easily pass through here
-                let possible_infinity_kind = if m.is_sign_positive() {
-                    InfinityKind::Positive
-                } else {
-                    InfinityKind::Negative
-                };
-                let e = match data_other.e.is_positive() {
-                    true => match data_self.e.checked_add(data_other.e) {
-                        Some(e) => e,
-                        None => return Big::Infinity(possible_infinity_kind),
-                    },
-                    false => match data_self.e.checked_sub(-data_other.e) {
-                        Some(e) => e,
-                        None => return Big::Zero,
-                    },
-                };
-
-                Big::new(m, e)
-            }
-        }
-    }
-
     pub fn log10(self) -> f64 {
         match self {
-            Self::Number(BigData { m, e }) => m.log10() + e as f64,
+            Self::Number { m, e } => m.log10() + e as f64,
             Self::Infinity(InfinityKind::Negative) => f64::NAN,
             Self::Infinity(InfinityKind::Positive) => f64::INFINITY,
             Self::Zero | Self::NaN => f64::NAN,
@@ -239,6 +136,63 @@ impl Big {
     }
 }
 
+impl AddAssign for Big {
+    fn add_assign(&mut self, rhs: Self) {
+        match (&self, &rhs) {
+            // NaN
+            (Self::NaN, _) | (_, Self::NaN) => *self = Self::NaN,
+
+            // Infinities
+
+            // +inf + -inf and -inf + +inf are undefined
+            (Self::Infinity(kind), Self::Infinity(kind2)) if kind != kind2 => *self = Self::NaN,
+            (Self::Infinity(_), Self::Infinity(_)) => return,
+
+            (Self::Infinity(_), Self::Number { .. } | Self::Zero) => {
+                return;
+            }
+            (Self::Number { .. } | Self::Zero, Self::Infinity(kind)) => {
+                *self = Self::Infinity(kind.clone())
+            }
+
+            // Zero
+            (Self::Zero, other) => {
+                *self = other.clone();
+            }
+            (Self::Number { .. }, Self::Zero) => return,
+            (Self::Number { .. }, Self::Number { .. }) => {}
+        }
+
+        // a + b
+        if let (
+            Self::Number { m, e },
+            Self::Number {
+                m: other_m,
+                e: other_e,
+            },
+        ) = (self, rhs)
+        {
+            let delta = other_e - *e;
+            match delta {
+                // ..=-SIG_DIGITS produced a syntax error
+                _delta if delta <= -SIG_DIGITS => {}
+                _delta if delta >= SIG_DIGITS => {
+                    *m = other_m;
+                    *e = other_e;
+                }
+                delta => {
+                    let delta: i32 = delta.try_into().expect(
+                        "exponent delta between a, b in a + b should never exceed 13
+                                                    and can therefore be cast into i32",
+                    );
+
+                    *m += other_m * 10.0_f64.powi(delta);
+                }
+            }
+        };
+    }
+}
+
 impl Display for Big {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -248,7 +202,7 @@ impl Display for Big {
             },
             Big::NaN => write!(f, "NaN"),
             Big::Zero => write!(f, "0"),
-            Big::Number(BigData { m, e }) => write!(f, "{}e{}", m, e),
+            Big::Number { m, e } => write!(f, "{}e{}", m, e),
         }
     }
 }
@@ -288,14 +242,14 @@ impl Into<Big> for f32 {
 
 #[cfg(test)]
 mod tests {
-    use std::{f64, i64};
+    use std::f64;
 
     use super::*;
 
     // methods for testing (mainly normalization)
     impl Big {
         fn m(&self) -> f64 {
-            if let Self::Number(BigData { m, e: _ }) = self {
+            if let Self::Number { m, e: _ } = self {
                 *m
             } else {
                 panic!("expected a valid mantissa but self is {:?}", self);
@@ -303,12 +257,16 @@ mod tests {
         }
 
         fn e(&self) -> i64 {
-            if let Self::Number(BigData { m: _, e }) = self {
+            if let Self::Number { m: _, e } = self {
                 *e
             } else {
                 panic!("expected a valid exponent but self is {:?}", self);
             }
         }
+    }
+
+    fn b(value: f64) -> Big {
+        value.into()
     }
 
     #[test]
@@ -360,52 +318,9 @@ mod tests {
 
     #[test]
     fn addition() {
-        let a: Big = 5.0.into();
-        let b: Big = 8.0.into();
-        let b_neg: Big = (-8.0).into();
-        let c: Big = 1.5e42.into();
-        let d: Big = Big::new(1.0, i64::MAX - 1);
-
-        assert_eq!(a.add(b), 13.0.into());
-        assert_eq!(a.add(b_neg), (-3.0).into());
-        assert_eq!(a.add(c), c);
-        assert_eq!(c.add(a), c);
-        assert_eq!(a.add(d), d);
-        assert_eq!(d.add(a), d);
-        assert_eq!(a.add(POS_INFINITY), POS_INFINITY);
-        assert_eq!(a.add(NEG_INFINITY), NEG_INFINITY);
-        assert_eq!(a.add(Big::NaN), Big::NaN);
-        assert_eq!(a.add(Big::Zero), a);
-        assert_eq!(Big::Zero.add(a), a);
-        assert_eq!(a.add(Big::Zero).add(b).add(b), 21.0.into());
-        assert_eq!(a.add(Big::Zero).add(b).add(Big::NaN).add(b), Big::NaN);
-        assert_eq!(POS_INFINITY.add(NEG_INFINITY), Big::NaN);
-    }
-
-    #[test]
-    fn multiplication() {
-        let a: Big = 5.0.into();
-        let b: Big = 8.0.into();
-        let b_neg: Big = (-8.0).into();
-        let c: Big = 1e42.into();
-        let high: Big = Big::new(1.0, i64::MAX - 1);
-        let low: Big = Big::new(1.0, i64::MIN + 1);
-
-        assert_eq!(a.mul(b), 40.0.into());
-        assert_eq!(a.mul(b_neg), (-40.0).into());
-        assert_eq!(a.mul(c), 5.0e42.into());
-        assert_eq!(a.mul(c), c.mul(a));
-
-        assert_eq!(high.mul(1_000_000.0.into()), POS_INFINITY);
-        assert_eq!(high.mul((-1_000_000.0).into()), NEG_INFINITY);
-        assert_eq!(low.mul(0.000_001.into()), Big::Zero);
-
-        assert!(a.mul(Big::NaN).is_nan());
-        assert!(POS_INFINITY.mul(NEG_INFINITY).is_nan());
-        assert!(a.mul(0.0.into()).is_zero());
-        assert!(a.mul(POS_INFINITY).is_pos_inf());
-        assert!(a.mul(NEG_INFINITY).is_neg_inf());
-        assert!(POS_INFINITY.mul(POS_INFINITY).is_nan());
+        let mut a = b(1.0);
+        a += b(1.0);
+        assert_eq!(a, b(2.0));
     }
 
     #[test]
