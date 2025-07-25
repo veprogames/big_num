@@ -43,8 +43,26 @@ impl Big {
     fn normalize(&mut self) {
         match *self {
             Self::Infinity(_) | Self::NaN | Self::Zero => return,
-            Self::Number { m, .. } if !m.is_normal() => return,
-            _ => {}
+            Self::Number { m, .. } => match m {
+                m if m == 0.0 => {
+                    *self = Self::Zero;
+                    return;
+                }
+                m if m.is_nan() => {
+                    *self = Self::NaN;
+                    return;
+                }
+                m if m == f64::INFINITY => {
+                    *self = POS_INFINITY;
+                    return;
+                }
+                m if m == f64::NEG_INFINITY => {
+                    *self = NEG_INFINITY;
+                    return;
+                }
+                // see below
+                _ => {}
+            },
         };
 
         if let Self::Number {
@@ -164,6 +182,8 @@ impl AddAssign for Big {
                 *self = other.clone();
             }
             (Self::Number { .. }, Self::Zero) => return,
+
+            // see below
             (Self::Number { .. }, Self::Number { .. }) => {}
         }
 
@@ -223,36 +243,27 @@ impl Display for Big {
     }
 }
 
-impl Into<Big> for f64 {
-    fn into(self) -> Big {
-        if self.is_nan() {
-            return Big::NaN;
-        }
-
-        if self.is_infinite() {
-            if self.is_sign_positive() {
-                return Big::Infinity(InfinityKind::Positive);
-            } else {
-                return Big::Infinity(InfinityKind::Negative);
-            }
-        }
-
-        if self == 0.0 {
-            return Big::Zero;
-        }
-
-        // f64 log cannot be outside of i64::MIN..i64::MAX
-        let log: i64 = self.log10() as i64;
-        let mantissa = self / 10.0_f64.powi(log as i32);
-        Big::new(mantissa, log)
+impl From<f64> for Big {
+    fn from(value: f64) -> Self {
+        Big::new(value, 0)
     }
 }
 
-impl Into<Big> for f32 {
-    fn into(self) -> Big {
-        let float_64: f64 = self.into();
-        let big: Big = float_64.into();
-        big
+impl From<f32> for Big {
+    fn from(value: f32) -> Self {
+        Big::new(value as f64, 0)
+    }
+}
+
+impl From<i64> for Big {
+    fn from(value: i64) -> Self {
+        Big::new(value as f64, 0)
+    }
+}
+
+impl From<i32> for Big {
+    fn from(value: i32) -> Self {
+        Big::new(value as f64, 0)
     }
 }
 
@@ -281,8 +292,11 @@ mod tests {
         }
     }
 
-    fn b(value: f64) -> Big {
-        value.into()
+    fn b<T>(value: T) -> Big
+    where
+        Big: From<T>,
+    {
+        Big::from(value)
     }
 
     #[test]
@@ -337,15 +351,15 @@ mod tests {
 
     #[test]
     fn addition() {
-        let mut a = b(1.0);
-        a += b(1.0);
-        assert_eq!(a, b(2.0));
+        let mut a = b(1);
+        a += b(1);
+        assert_eq!(a, b(2));
 
-        assert_eq!(b(4.0) + b(-5.0), b(-1.0));
-        assert_eq!(b(1.0) + Big::NaN, Big::NaN);
-        assert_eq!(Big::Zero + b(0.0) + Big::Zero, Big::Zero);
-        assert_eq!(b(0.0) + b(-0.0), Big::Zero);
-        assert_eq!(b(1.0) + POS_INFINITY, POS_INFINITY);
+        assert_eq!(b(4) + b(-5), b(-1));
+        assert_eq!(b(1) + Big::NaN, Big::NaN);
+        assert_eq!(Big::Zero + b(0) + Big::Zero, Big::Zero);
+        assert_eq!(b(0) + b(-0), Big::Zero);
+        assert_eq!(b(1) + POS_INFINITY, POS_INFINITY);
     }
 
     #[test]
