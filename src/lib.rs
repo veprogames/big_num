@@ -1,4 +1,8 @@
-use std::{f64, fmt::Display, ops::AddAssign};
+use std::{
+    f64,
+    fmt::Display,
+    ops::{Add, AddAssign},
+};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Big {
@@ -30,6 +34,12 @@ impl Big {
         number
     }
 
+    fn normalize_m_and_e(m: &mut f64, e: &mut i64) {
+        let log = m.abs().log10() as i64;
+        *m /= 10.0_f64.powi(log as i32);
+        *e += log;
+    }
+
     fn normalize(&mut self) {
         match *self {
             Self::Infinity(_) | Self::NaN | Self::Zero => return,
@@ -47,30 +57,24 @@ impl Big {
             match log {
                 // might underflow to Zero
                 ..=0 => {
-                    match e.checked_sub(-log) {
-                        Some(new_e) => *e = new_e,
-                        None => *self = Self::Zero,
-                    };
-                    return;
+                    if e.checked_sub(-log).is_none() {
+                        *self = Self::Zero;
+                        return;
+                    }
                 }
                 // might overflow to either positive or negative Infinity (+inf; -inf)
-                _positive => match e.checked_add(log) {
-                    Some(new_e) => *e = new_e,
-                    None => {
+                _positive => {
+                    if e.checked_add(log).is_none() {
                         match m.is_sign_positive() {
                             true => *self = POS_INFINITY,
                             false => *self = NEG_INFINITY,
                         };
                         return;
                     }
-                },
+                }
             }
 
-            let log_i32: i32 = log.try_into().expect(
-                "abs(log) of mantissa should never exceed ~350
-                                           and therefore can be cast to i32",
-            );
-            *m /= 10.0_f64.powi(log_i32);
+            Self::normalize_m_and_e(m, e);
         }
     }
 
@@ -187,9 +191,21 @@ impl AddAssign for Big {
                     );
 
                     *m += other_m * 10.0_f64.powi(delta);
+
+                    Self::normalize_m_and_e(m, e);
                 }
             }
         };
+    }
+}
+
+impl Add for Big {
+    type Output = Big;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let mut result = self.clone();
+        result += rhs;
+        result
     }
 }
 
@@ -314,6 +330,9 @@ mod tests {
         let norm = Big::new(0.001, 0);
         assert_eq!(norm.m(), 1.0);
         assert_eq!(norm.e(), -3);
+
+        let norm = Big::new(0.0, 4);
+        assert_eq!(norm, Big::Zero);
     }
 
     #[test]
@@ -321,6 +340,12 @@ mod tests {
         let mut a = b(1.0);
         a += b(1.0);
         assert_eq!(a, b(2.0));
+
+        assert_eq!(b(4.0) + b(-5.0), b(-1.0));
+        assert_eq!(b(1.0) + Big::NaN, Big::NaN);
+        assert_eq!(Big::Zero + b(0.0) + Big::Zero, Big::Zero);
+        assert_eq!(b(0.0) + b(-0.0), Big::Zero);
+        assert_eq!(b(1.0) + POS_INFINITY, POS_INFINITY);
     }
 
     #[test]
