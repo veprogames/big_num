@@ -4,6 +4,10 @@ use std::{
     ops::{Add, AddAssign},
 };
 
+mod conversion;
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Big {
     Number { m: f64, e: i64 },
@@ -20,8 +24,6 @@ pub enum InfinityKind {
 
 pub const POS_INFINITY: Big = Big::Infinity(InfinityKind::Positive);
 pub const NEG_INFINITY: Big = Big::Infinity(InfinityKind::Negative);
-// declared as i64 because it makes casting unneeded when working
-// in the content of BigData::e, a i64
 const SIG_DIGITS: i64 = 15;
 
 impl Big {
@@ -39,7 +41,7 @@ impl Big {
     /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
     /// You will have to call normalize() yourself at some point to prevent bugs.
     ///
-    /// In 99 % of cases you will want to use Big::new or Big::From instead
+    /// You will most likely want to use Big::new or Big::From instead
     pub fn new_unnormalized(mantissa: f64, exponent: i64) -> Self {
         Self::Number {
             m: mantissa,
@@ -47,6 +49,9 @@ impl Big {
         }
     }
 
+    /// Normalize the number so it is in a correct state.
+    ///
+    /// **Note:** Unless you used any _unnormalized method, you never need to call this manually.
     pub fn normalize(&mut self) {
         match *self {
             Self::Infinity(_) | Self::NaN | Self::Zero => return,
@@ -110,7 +115,7 @@ impl Big {
     /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
     /// You will have to call normalize() yourself at some point to prevent bugs.
     ///
-    /// In over 99 % of cases you will want to use the += or + operator instead, which will normalize the result automatically.
+    /// You will most likely want to use the += or + operator instead, which will normalize the result automatically.
     pub fn add_mut_unnormalized(&mut self, rhs: Self) {
         match (&self, &rhs) {
             // NaN
@@ -258,150 +263,5 @@ impl Display for Big {
             Big::Zero => write!(f, "0"),
             Big::Number { m, e } => write!(f, "{}e{}", m, e),
         }
-    }
-}
-
-impl From<f64> for Big {
-    fn from(value: f64) -> Self {
-        Big::new(value, 0)
-    }
-}
-
-impl From<f32> for Big {
-    fn from(value: f32) -> Self {
-        Big::new(value as f64, 0)
-    }
-}
-
-impl From<i64> for Big {
-    fn from(value: i64) -> Self {
-        Big::new(value as f64, 0)
-    }
-}
-
-impl From<i32> for Big {
-    fn from(value: i32) -> Self {
-        Big::new(value as f64, 0)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::f64;
-
-    use super::*;
-
-    // methods for testing (mainly normalization)
-    impl Big {
-        fn m(&self) -> f64 {
-            if let Self::Number { m, e: _ } = self {
-                *m
-            } else {
-                panic!("expected a valid mantissa but self is {:?}", self);
-            }
-        }
-
-        fn e(&self) -> i64 {
-            if let Self::Number { m: _, e } = self {
-                *e
-            } else {
-                panic!("expected a valid exponent but self is {:?}", self);
-            }
-        }
-    }
-
-    fn b<T>(value: T) -> Big
-    where
-        Big: From<T>,
-    {
-        Big::from(value)
-    }
-
-    #[test]
-    fn creation() {
-        // from ::new
-        Big::new(1.0, 0);
-        Big::new(-1.0, 0);
-        Big::new(1.0, i64::MAX);
-        Big::new(1.0, i64::MIN);
-
-        let pos_inf = Big::new(100.0, i64::MAX - 1);
-        assert_eq!(pos_inf, POS_INFINITY);
-
-        let neg_inf = Big::new(-100.0, i64::MAX - 1);
-        assert_eq!(neg_inf, NEG_INFINITY);
-
-        let zero = Big::new(0.01, i64::MIN + 1);
-        assert_eq!(zero, Big::Zero);
-
-        // from f64
-        let _: Big = f64::MIN_POSITIVE.into();
-        let _: Big = f64::MAX.into();
-        let zero: Big = 0.0_f64.into();
-        assert!(zero.is_zero());
-        let nan: Big = f64::NAN.into();
-        assert!(nan.is_nan());
-        let inf: Big = f64::INFINITY.into();
-        assert!(inf.is_pos_inf());
-        let inf: Big = (-f64::INFINITY).into();
-        assert!(inf.is_neg_inf());
-    }
-
-    #[test]
-    // Note: this doesn't need thorough testing because Big::new in creation
-    // implicitly calls normalized
-    fn normalization() {
-        let norm = Big::new(1234.5, 0);
-        assert_eq!(norm.m(), 1.2345);
-        assert_eq!(norm.e(), 3);
-
-        let norm = Big::new(-1234.5, 0);
-        assert_eq!(norm.m(), -1.2345);
-        assert_eq!(norm.e(), 3);
-
-        let norm = Big::new(0.001, 0);
-        assert_eq!(norm.m(), 1.0);
-        assert_eq!(norm.e(), -3);
-
-        let norm = Big::new(0.0, 4);
-        assert_eq!(norm, Big::Zero);
-    }
-
-    #[test]
-    fn addition() {
-        let mut a = b(1);
-        a += b(1);
-        assert_eq!(a, b(2));
-
-        assert_eq!(b(4) + b(-5), b(-1));
-        assert_eq!(b(1) + Big::NaN, Big::NaN);
-        assert_eq!(Big::Zero + b(0) + Big::Zero, Big::Zero);
-        assert_eq!(b(0) + b(-0), Big::Zero);
-        assert_eq!(b(1) + POS_INFINITY, POS_INFINITY);
-        assert_eq!(
-            Big::new(9.0, i64::MAX) + Big::new(9.0, i64::MAX),
-            POS_INFINITY
-        );
-    }
-
-    #[test]
-    fn logarithms() {
-        assert_eq!(Big::new(f64::consts::E, 0).ln(), 1.0);
-        assert_eq!(Big::new(f64::consts::E.powf(5.0), 0).ln(), 5.0);
-        assert_eq!(Big::new(10.0, 0).log10(), 1.0);
-        assert_eq!(Big::new(1.0, 0).log10(), 0.0);
-        assert!(Big::new(0.0, 0).log10().is_nan());
-        assert!(Big::new(-10.0, 0).log10().is_nan());
-    }
-
-    #[test]
-    fn power() {
-        assert_eq!(Big::new(16.0, 0).pow(0.5), Big::new(4.0, 0));
-        assert_eq!(Big::new(0.25, 0).pow(-1.0), Big::new(4.0, 0));
-        assert_eq!(Big::new(3454.0, 0).pow(0.0), Big::new(1.0, 0));
-        assert_eq!(Big::new(0.0, 0).pow(0.0), Big::NaN);
-        assert_eq!(Big::new(0.0, 0).pow(1.0), Big::Zero);
-        assert_eq!(Big::new(1.0, i64::MAX - 1).pow(2.0), POS_INFINITY);
-        assert_eq!(Big::new(1.0, i64::MAX - 1).pow(-2.0), Big::Zero);
     }
 }
