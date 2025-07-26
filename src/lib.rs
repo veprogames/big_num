@@ -34,13 +34,20 @@ impl Big {
         number
     }
 
-    fn normalize_m_and_e(m: &mut f64, e: &mut i64) {
-        let log = m.abs().log10() as i64;
-        *m /= 10.0_f64.powi(log as i32);
-        *e += log;
+    /// Create a new Instance, skipping normalization
+    ///
+    /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
+    /// You will have to call normalize() yourself at some point to prevent bugs.
+    ///
+    /// In 99 % of cases you will want to use Big::new or Big::From instead
+    pub fn new_unnormalized(mantissa: f64, exponent: i64) -> Self {
+        Self::Number {
+            m: mantissa,
+            e: exponent,
+        }
     }
 
-    fn normalize(&mut self) {
+    pub fn normalize(&mut self) {
         match *self {
             Self::Infinity(_) | Self::NaN | Self::Zero => return,
             Self::Number { m, .. } => match m {
@@ -92,8 +99,73 @@ impl Big {
                 }
             }
 
-            Self::normalize_m_and_e(m, e);
+            let log = m.abs().log10() as i64;
+            *m /= 10.0_f64.powi(log as i32);
+            *e += log;
         }
+    }
+
+    /// This will add rhs to self without normalizing the result.
+    ///
+    /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
+    /// You will have to call normalize() yourself at some point to prevent bugs.
+    ///
+    /// In over 99 % of cases you will want to use the += or + operator instead, which will normalize the result automatically.
+    pub fn add_mut_unnormalized(&mut self, rhs: Self) {
+        match (&self, &rhs) {
+            // NaN
+            (Self::NaN, _) | (_, Self::NaN) => *self = Self::NaN,
+
+            // Infinities
+
+            // +inf + -inf and -inf + +inf are undefined
+            (Self::Infinity(kind), Self::Infinity(kind2)) if kind != kind2 => *self = Self::NaN,
+            (Self::Infinity(_), Self::Infinity(_)) => return,
+
+            (Self::Infinity(_), Self::Number { .. } | Self::Zero) => {
+                return;
+            }
+            (Self::Number { .. } | Self::Zero, Self::Infinity(kind)) => {
+                *self = Self::Infinity(kind.clone())
+            }
+
+            // Zero
+            (Self::Zero, other) => {
+                *self = other.clone();
+            }
+            (Self::Number { .. }, Self::Zero) => return,
+
+            // see below
+            (Self::Number { .. }, Self::Number { .. }) => {}
+        }
+
+        // a + b
+        if let (
+            Self::Number { m, e },
+            Self::Number {
+                m: other_m,
+                e: other_e,
+            },
+        ) = (self, rhs)
+        {
+            let delta = other_e - *e;
+            match delta {
+                // ..=-SIG_DIGITS produced a syntax error
+                _delta if delta <= -SIG_DIGITS => {}
+                _delta if delta >= SIG_DIGITS => {
+                    *m = other_m;
+                    *e = other_e;
+                }
+                delta => {
+                    let delta: i32 = delta.try_into().expect(
+                        "exponent delta between a, b in a + b should never exceed 13
+                                                        and can therefore be cast into i32",
+                    );
+
+                    *m += other_m * 10.0_f64.powi(delta);
+                }
+            }
+        };
     }
 
     pub fn is_nan(&self) -> bool {
@@ -160,62 +232,8 @@ impl Big {
 
 impl AddAssign for Big {
     fn add_assign(&mut self, rhs: Self) {
-        match (&self, &rhs) {
-            // NaN
-            (Self::NaN, _) | (_, Self::NaN) => *self = Self::NaN,
-
-            // Infinities
-
-            // +inf + -inf and -inf + +inf are undefined
-            (Self::Infinity(kind), Self::Infinity(kind2)) if kind != kind2 => *self = Self::NaN,
-            (Self::Infinity(_), Self::Infinity(_)) => return,
-
-            (Self::Infinity(_), Self::Number { .. } | Self::Zero) => {
-                return;
-            }
-            (Self::Number { .. } | Self::Zero, Self::Infinity(kind)) => {
-                *self = Self::Infinity(kind.clone())
-            }
-
-            // Zero
-            (Self::Zero, other) => {
-                *self = other.clone();
-            }
-            (Self::Number { .. }, Self::Zero) => return,
-
-            // see below
-            (Self::Number { .. }, Self::Number { .. }) => {}
-        }
-
-        // a + b
-        if let (
-            Self::Number { m, e },
-            Self::Number {
-                m: other_m,
-                e: other_e,
-            },
-        ) = (self, rhs)
-        {
-            let delta = other_e - *e;
-            match delta {
-                // ..=-SIG_DIGITS produced a syntax error
-                _delta if delta <= -SIG_DIGITS => {}
-                _delta if delta >= SIG_DIGITS => {
-                    *m = other_m;
-                    *e = other_e;
-                }
-                delta => {
-                    let delta: i32 = delta.try_into().expect(
-                        "exponent delta between a, b in a + b should never exceed 13
-                                                    and can therefore be cast into i32",
-                    );
-
-                    *m += other_m * 10.0_f64.powi(delta);
-
-                    Self::normalize_m_and_e(m, e);
-                }
-            }
-        };
+        self.add_mut_unnormalized(rhs);
+        self.normalize();
     }
 }
 
@@ -360,6 +378,10 @@ mod tests {
         assert_eq!(Big::Zero + b(0) + Big::Zero, Big::Zero);
         assert_eq!(b(0) + b(-0), Big::Zero);
         assert_eq!(b(1) + POS_INFINITY, POS_INFINITY);
+        assert_eq!(
+            Big::new(9.0, i64::MAX) + Big::new(9.0, i64::MAX),
+            POS_INFINITY
+        );
     }
 
     #[test]
