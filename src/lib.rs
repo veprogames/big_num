@@ -1,7 +1,7 @@
 use std::{
     f64,
     fmt::Display,
-    ops::{Add, AddAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
 };
 
 mod conversion;
@@ -72,6 +72,8 @@ impl Big {
                     *self = NEG_INFINITY;
                     return;
                 }
+                // if the number is already normalized, we can skip everything below
+                m if (1.0..10.0).contains(&m) => return,
                 // see below
                 _ => {}
             },
@@ -104,9 +106,21 @@ impl Big {
                 }
             }
 
-            let log = m.abs().log10() as i64;
+            let log = m.abs().log10().floor() as i64;
             *m /= 10.0_f64.powi(log as i32);
             *e += log;
+        }
+    }
+
+    pub fn neg_mut(&mut self) {
+        // normalization should not be required here
+        match self {
+            &mut POS_INFINITY => *self = NEG_INFINITY,
+            &mut NEG_INFINITY => *self = POS_INFINITY,
+            Self::Number { m, .. } => {
+                *m *= 1.0;
+            }
+            _ => {}
         }
     }
 
@@ -170,6 +184,150 @@ impl Big {
                     *m += other_m * 10.0_f64.powi(delta);
                 }
             }
+        };
+    }
+
+    /// This will substract rhs from self without normalizing the result.
+    ///
+    /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
+    /// You will have to call normalize() yourself at some point to prevent bugs.
+    ///
+    /// You will most likely want to use the -= or - operator instead, which will normalize the result automatically.
+    pub fn sub_mut_unnormalized(&mut self, rhs: Self) {
+        match (&self, &rhs) {
+            // NaN
+            (Self::NaN, _) | (_, Self::NaN) => *self = Self::NaN,
+
+            // Infinities
+
+            // +inf - -inf and -inf - +inf are undefined
+            (Self::Infinity(_), Self::Infinity(_)) => *self = Self::NaN,
+
+            (Self::Infinity(_), Self::Number { .. } | Self::Zero) => {
+                return;
+            }
+            (Self::Number { .. } | Self::Zero, &POS_INFINITY) => {
+                *self = NEG_INFINITY;
+            }
+            (Self::Number { .. } | Self::Zero, &NEG_INFINITY) => {
+                *self = POS_INFINITY;
+            }
+
+            // Zero
+            (Self::Zero, other) => {
+                *self = other.clone();
+                self.neg_mut();
+            }
+            (Self::Number { .. }, Self::Zero) => return,
+
+            // see below
+            (Self::Number { .. }, Self::Number { .. }) => {}
+        }
+
+        // a - b
+        if let (
+            Self::Number { m, e },
+            Self::Number {
+                m: other_m,
+                e: other_e,
+            },
+        ) = (self, rhs)
+        {
+            let delta = other_e - *e;
+            match delta {
+                // ..=-SIG_DIGITS produced a syntax error
+                _delta if delta <= -SIG_DIGITS => {}
+                _delta if delta >= SIG_DIGITS => {
+                    *m = other_m;
+                    *e = other_e;
+                }
+                delta => {
+                    let delta: i32 = delta.try_into().expect(
+                        "exponent delta between a, b in a - b should never exceed 13
+                                                            and can therefore be cast into i32",
+                    );
+
+                    *m -= other_m * 10.0_f64.powi(delta);
+                }
+            }
+        };
+    }
+
+    /// This will multiply rhs onto self without normalizing the result.
+    ///
+    /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
+    /// You will have to call normalize() yourself at some point to prevent bugs.
+    ///
+    /// You will most likely want to use the *= or * operator instead, which will normalize the result automatically.
+    pub fn mul_mut_unnormalized(&mut self, rhs: Self) {
+        match (&self, &rhs) {
+            // NaN
+            (Self::NaN, _) | (_, Self::NaN) => *self = Self::NaN,
+
+            // Infinities
+            (Self::Infinity(_), &POS_INFINITY) => return,
+            (_, &NEG_INFINITY) => *self = NEG_INFINITY,
+            (Self::Zero, Self::Infinity(_)) | (Self::Infinity(_), Self::Zero) => *self = Self::NaN,
+            (Self::Number { .. }, Self::Infinity(kind)) => *self = Self::Infinity(kind.clone()),
+            (Self::Infinity(_), Self::Number { .. }) => return,
+
+            // Zero
+            (Self::Zero, _) => return,
+            (Self::Number { .. }, Self::Zero) => *self = Self::Zero,
+
+            // see below
+            (Self::Number { .. }, Self::Number { .. }) => {}
+        }
+
+        // a * b
+        if let (
+            Self::Number { m, e },
+            Self::Number {
+                m: other_m,
+                e: other_e,
+            },
+        ) = (self, rhs)
+        {
+            *m *= other_m;
+            *e += other_e;
+        };
+    }
+
+    /// This will divide rhs from self without normalizing the result.
+    ///
+    /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
+    /// You will have to call normalize() yourself at some point to prevent bugs.
+    ///
+    /// You will most likely want to use the /= or / operator instead, which will normalize the result automatically.
+    pub fn div_mut_unnormalized(&mut self, rhs: Self) {
+        match (&self, &rhs) {
+            // NaN
+            (Self::NaN, _) | (_, Self::NaN) => *self = Self::NaN,
+
+            // Infinities
+            (Self::Infinity(_), Self::Infinity(_)) => *self = Self::NaN,
+            (Self::Number { .. } | Self::Zero, Self::Infinity(_)) => *self = Self::Zero,
+            (Self::Infinity(_), Self::Number { .. }) => return,
+
+            // Zero
+            (Self::Zero, _) => return,
+            (_, Self::Zero) => *self = Self::NaN,
+
+            // see below
+            (Self::Number { .. }, Self::Number { .. }) => {}
+        }
+
+        // a / b
+        if let (
+            Self::Number { m, e },
+            Self::Number {
+                m: other_m,
+                e: other_e,
+            },
+        ) = (self, rhs)
+        {
+            *m /= other_m;
+            *e -= other_e;
         };
     }
 
@@ -248,6 +406,57 @@ impl Add for Big {
     fn add(self, rhs: Self) -> Self::Output {
         let mut result = self.clone();
         result += rhs;
+        result
+    }
+}
+
+impl SubAssign for Big {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.sub_mut_unnormalized(rhs);
+        self.normalize();
+    }
+}
+
+impl Sub for Big {
+    type Output = Big;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        let mut result = self.clone();
+        result -= rhs;
+        result
+    }
+}
+
+impl MulAssign for Big {
+    fn mul_assign(&mut self, rhs: Self) {
+        self.mul_mut_unnormalized(rhs);
+        self.normalize();
+    }
+}
+
+impl Mul for Big {
+    type Output = Big;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let mut result = self.clone();
+        result *= rhs;
+        result
+    }
+}
+
+impl DivAssign for Big {
+    fn div_assign(&mut self, rhs: Self) {
+        self.div_mut_unnormalized(rhs);
+        self.normalize();
+    }
+}
+
+impl Div for Big {
+    type Output = Big;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        let mut result = self.clone();
+        result /= rhs;
         result
     }
 }
