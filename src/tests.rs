@@ -150,12 +150,12 @@ fn logarithms() {
 
 #[test]
 fn power() {
-    assert_eq!(b(16.0).pow(0.5), b(4.0));
-    assert_eq!(b(-4.0).pow(2.0), b(16.0));
-    assert_eq!(b(0.25).pow(-1.0), b(4.0));
-    assert_eq!(b(3454.0).pow(0.0), b(1.0));
-    assert_eq!(b(0.0).pow(0.0), Big::NaN);
-    assert_eq!(b(0.0).pow(1.0), Big::Zero);
-    assert_eq!(Big::new(1.0, i64::MAX - 1).pow(2.0), POS_INFINITY);
-    assert_eq!(Big::new(1.0, i64::MAX - 1).pow(-2.0), Big::Zero);
+    assert_eq!(b(16.0).powf(0.5), b(4.0));
+    assert_eq!(b(-4.0).powf(2.0), b(16.0));
+    assert_eq!(b(0.25).powf(-1.0), b(4.0));
+    assert_eq!(b(3454.0).powf(0.0), b(1.0));
+    assert_eq!(b(0.0).powf(0.0), Big::NaN);
+    assert_eq!(b(0.0).powf(1.0), Big::Zero);
+    assert_eq!(Big::new(1.0, i64::MAX - 1).powf(2.0), POS_INFINITY);
+    assert_eq!(Big::new(1.0, i64::MAX - 1).powf(-2.0), Big::Zero);
 }

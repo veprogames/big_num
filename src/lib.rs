@@ -417,7 +417,7 @@ impl Big {
     }
 
     /// Raise self to power, returning a new Instance
-    pub fn pow(&self, power: f64) -> Self {
+    pub fn powf(&self, power: f64) -> Self {
         let mut result = self.clone();
         result.powf_mut(power);
         result
