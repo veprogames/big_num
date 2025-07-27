@@ -331,6 +331,20 @@ impl Big {
         };
     }
 
+    /// Take the absolute value of self, modifying it in-place
+    pub fn abs_mut(&mut self) {
+        if let Self::Number { m, .. } = self {
+            *m = m.abs();
+        }
+    }
+
+    /// Take the absolute value of self, creating a new Instance
+    pub fn abs(&self) -> Self {
+        let mut result = self.clone();
+        result.abs_mut();
+        result
+    }
+
     pub fn is_nan(&self) -> bool {
         self == &Big::NaN
     }
@@ -371,25 +385,42 @@ impl Big {
         }
     }
 
-    pub fn pow(self, power: f64) -> Self {
-        // handle 0 ^ power = 0, which cannot be determined using logarithm method below
+    /// Raise self to power and modify it in-place.
+    pub fn powf_mut(&mut self, power: f64) {
         if let Self::Zero = self {
             if power.is_normal() {
-                return Self::Zero;
+                return;
             }
         }
 
-        let result_log10 = self.log10() * power;
+        let result_log10 = self.abs().log10() * power;
 
         match result_log10 {
-            f64::NEG_INFINITY => Self::NaN,
-            f64::INFINITY => POS_INFINITY,
-            log if log.is_nan() => Self::NaN,
+            f64::NEG_INFINITY => *self = Self::NaN,
+            f64::INFINITY => *self = POS_INFINITY,
+            log if log.is_nan() => *self = Self::NaN,
             // result_log10 may over/underflow as an i64, handle it
-            log if log < i64::MIN as f64 => Self::Zero,
-            log if log > i64::MAX as f64 => POS_INFINITY,
-            log => Big::new(10.0_f64.powf(log % 1.0), log as i64),
-        }
+            log if log < i64::MIN as f64 => *self = Self::Zero,
+            log if log > i64::MAX as f64 => *self = POS_INFINITY,
+            // normaliazion shouldn't be required here, since m will be between 1.0 and < 10.0
+            log => {
+                if let Self::Number { m, e } = self {
+                    *m = 10.0_f64.powf(log % 1.0);
+                    // minus times minus is plus
+                    if log % 2.0 == 0.0 {
+                        *m = m.abs();
+                    }
+                    *e = log as i64;
+                }
+            }
+        };
+    }
+
+    /// Raise self to power, returning a new Instance
+    pub fn pow(&self, power: f64) -> Self {
+        let mut result = self.clone();
+        result.powf_mut(power);
+        result
     }
 }
 
