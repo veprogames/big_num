@@ -37,10 +37,10 @@ fn creation() {
     Big::new(1.0, i64::MIN);
 
     let pos_inf = Big::new(100.0, i64::MAX - 1);
-    assert_eq!(pos_inf, POS_INFINITY);
+    assert!(pos_inf.is_pos_inf());
 
     let neg_inf = Big::new(-100.0, i64::MAX - 1);
-    assert_eq!(neg_inf, NEG_INFINITY);
+    assert!(neg_inf.is_neg_inf());
 
     let zero = Big::new(0.01, i64::MIN + 1);
     assert_eq!(zero, Big::Zero);
@@ -86,14 +86,11 @@ fn addition() {
     assert_eq!(a, b(2));
 
     assert_eq!(b(4) + b(-15), b(-11));
-    assert_eq!(b(1) + Big::NaN, Big::NaN);
+    assert!((b(1) + Big::NaN).is_nan());
     assert_eq!(Big::Zero + b(0) + Big::Zero, Big::Zero);
     assert_eq!(b(0) + b(-0), Big::Zero);
-    assert_eq!(b(1) + POS_INFINITY, POS_INFINITY);
-    assert_eq!(
-        Big::new(9.0, i64::MAX) + Big::new(9.0, i64::MAX),
-        POS_INFINITY
-    );
+    assert!((b(1) + POS_INFINITY).is_pos_inf());
+    assert!((Big::new(9.0, i64::MAX) + Big::new(9.0, i64::MAX)).is_pos_inf());
 }
 
 #[test]
@@ -103,14 +100,11 @@ fn substraction() {
     assert_eq!(a, b(0));
 
     assert_eq!(b(4) - b(-15), b(19));
-    assert_eq!(b(1) - Big::NaN, Big::NaN);
+    assert!((b(1) - Big::NaN).is_nan());
     assert_eq!(Big::Zero - b(0) - Big::Zero, Big::Zero);
     assert_eq!(b(0) - b(-0), Big::Zero);
-    assert_eq!(b(1) - POS_INFINITY, NEG_INFINITY);
-    assert_eq!(
-        Big::new(-9.0, i64::MAX) - Big::new(9.0, i64::MAX),
-        NEG_INFINITY
-    );
+    assert!((b(1) - POS_INFINITY).is_neg_inf());
+    assert!((Big::new(-9.0, i64::MAX) - Big::new(9.0, i64::MAX)).is_neg_inf());
 }
 
 #[test]
@@ -121,8 +115,8 @@ fn multiplication() {
 
     assert_eq!(b(7) * b(6), b(42));
     assert_eq!(b(7) * b(-6), b(-42));
-    assert_eq!(POS_INFINITY * b(0), Big::NaN);
-    assert_eq!(POS_INFINITY * NEG_INFINITY, NEG_INFINITY);
+    assert!((POS_INFINITY * b(0)).is_nan());
+    assert!((POS_INFINITY * NEG_INFINITY).is_neg_inf());
 }
 
 #[test]
@@ -133,9 +127,9 @@ fn division() {
 
     assert_eq!(b(42) / b(6), b(7));
     assert_eq!(b(42) / b(-6), b(-7));
-    assert_eq!(b(42) / b(0), Big::NaN);
-    assert_eq!(POS_INFINITY / b(0), Big::NaN);
-    assert_eq!(POS_INFINITY / NEG_INFINITY, Big::NaN);
+    assert!((b(42) / b(0)).is_nan());
+    assert!((POS_INFINITY / b(0)).is_nan());
+    assert!((POS_INFINITY / NEG_INFINITY).is_nan());
 }
 
 #[test]
@@ -154,9 +148,9 @@ fn power() {
     assert_eq!(b(-4.0).powf(2.0), b(16.0));
     assert_eq!(b(0.25).powf(-1.0), b(4.0));
     assert_eq!(b(3454.0).powf(0.0), b(1.0));
-    assert_eq!(b(0.0).powf(0.0), Big::NaN);
+    assert!((b(0.0).powf(0.0)).is_nan());
     assert_eq!(b(0.0).powf(1.0), Big::Zero);
-    assert_eq!(Big::new(1.0, i64::MAX - 1).powf(2.0), POS_INFINITY);
+    assert!((Big::new(1.0, i64::MAX - 1).powf(2.0)).is_pos_inf());
     assert_eq!(Big::new(1.0, i64::MAX - 1).powf(-2.0), Big::Zero);
 }
 
@@ -168,6 +162,17 @@ fn remainder() {
     assert_eq!(Big::new(1.2345, 1234) % b(5), b(0));
     assert_eq!(b(5) % Big::new(1.2345, 1234), b(5));
     assert_eq!(b(5) % POS_INFINITY, b(5));
-    assert_eq!(POS_INFINITY % b(5), Big::NaN);
-    assert_eq!(b(42) % b(0), Big::NaN);
+    assert!((POS_INFINITY % b(5)).is_nan());
+    assert!((b(42) % b(0)).is_nan());
+}
+
+#[test]
+fn comparison() {
+    assert!(b(11) > b(9));
+    assert!(b(-5) < b(4));
+    assert!(POS_INFINITY > Big::new(9.9, i64::MAX));
+    assert!(NEG_INFINITY < Big::new(9.9, i64::MAX));
+    assert!(NEG_INFINITY < POS_INFINITY);
+    assert_eq!(POS_INFINITY != POS_INFINITY, true);
+    assert_eq!(POS_INFINITY == POS_INFINITY, false);
 }

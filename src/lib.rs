@@ -4,11 +4,12 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign},
 };
 
+mod comparison;
 mod conversion;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum Big {
     Number { m: f64, e: i64 },
     NaN,
@@ -115,8 +116,8 @@ impl Big {
     pub fn neg_mut(&mut self) {
         // normalization should not be required here
         match self {
-            &mut POS_INFINITY => *self = NEG_INFINITY,
-            &mut NEG_INFINITY => *self = POS_INFINITY,
+            Self::Infinity(InfinityKind::Positive) => *self = NEG_INFINITY,
+            Self::Infinity(InfinityKind::Negative) => *self = POS_INFINITY,
             Self::Number { m, .. } => {
                 *m *= 1.0;
             }
@@ -206,10 +207,10 @@ impl Big {
             (Self::Infinity(_), Self::Number { .. } | Self::Zero) => {
                 return;
             }
-            (Self::Number { .. } | Self::Zero, &POS_INFINITY) => {
+            (Self::Number { .. } | Self::Zero, Self::Infinity(InfinityKind::Positive)) => {
                 *self = NEG_INFINITY;
             }
-            (Self::Number { .. } | Self::Zero, &NEG_INFINITY) => {
+            (Self::Number { .. } | Self::Zero, Self::Infinity(InfinityKind::Negative)) => {
                 *self = POS_INFINITY;
             }
 
@@ -265,8 +266,8 @@ impl Big {
             (Self::NaN, _) | (_, Self::NaN) => *self = Self::NaN,
 
             // Infinities
-            (Self::Infinity(_), &POS_INFINITY) => return,
-            (_, &NEG_INFINITY) => *self = NEG_INFINITY,
+            (Self::Infinity(_), Self::Infinity(InfinityKind::Positive)) => return,
+            (_, Self::Infinity(InfinityKind::Negative)) => *self = NEG_INFINITY,
             (Self::Zero, Self::Infinity(_)) | (Self::Infinity(_), Self::Zero) => *self = Self::NaN,
             (Self::Number { .. }, Self::Infinity(kind)) => *self = Self::Infinity(kind.clone()),
             (Self::Infinity(_), Self::Number { .. }) => return,
@@ -346,15 +347,27 @@ impl Big {
     }
 
     pub fn is_nan(&self) -> bool {
-        self == &Big::NaN
+        if let Self::NaN = self {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn is_pos_inf(&self) -> bool {
-        self == &Big::Infinity(InfinityKind::Positive)
+        if let Self::Infinity(InfinityKind::Positive) = self {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn is_neg_inf(&self) -> bool {
-        self == &Big::Infinity(InfinityKind::Negative)
+        if let Self::Infinity(InfinityKind::Negative) = self {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn is_zero(&self) -> bool {
