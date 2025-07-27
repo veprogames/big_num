@@ -159,3 +159,15 @@ fn power() {
     assert_eq!(Big::new(1.0, i64::MAX - 1).powf(2.0), POS_INFINITY);
     assert_eq!(Big::new(1.0, i64::MAX - 1).powf(-2.0), Big::Zero);
 }
+
+#[test]
+fn remainder() {
+    assert_eq!(b(8) % b(3), b(2));
+    assert_eq!(b(-8) % b(3), b(-2));
+    assert_eq!(b(8) % b(-3), b(2));
+    assert_eq!(Big::new(1.2345, 1234) % b(5), b(0));
+    assert_eq!(b(5) % Big::new(1.2345, 1234), b(5));
+    assert_eq!(b(5) % POS_INFINITY, b(5));
+    assert_eq!(POS_INFINITY % b(5), Big::NaN);
+    assert_eq!(b(42) % b(0), Big::NaN);
+}

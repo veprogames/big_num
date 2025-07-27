@@ -1,7 +1,7 @@
 use std::{
     f64,
     fmt::Display,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign},
 };
 
 mod conversion;
@@ -422,6 +422,41 @@ impl Big {
         result.powf_mut(power);
         result
     }
+
+    /// This will put the remainder of self % rhs into self without normalizing the result.
+    ///
+    /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
+    /// You will have to call normalize() yourself at some point to prevent bugs.
+    ///
+    /// You will most likely want to use the %= or % operator instead, which will normalize the result automatically.
+    pub fn remainder_mut_unnormalized(&mut self, rhs: &Big) {
+        match (&self, rhs) {
+            (Self::NaN, _) | (_, Self::NaN) => return,
+            (_, Self::Zero) => *self = Self::NaN,
+            (Self::Infinity(_), Self::Infinity(_)) => *self = Self::NaN,
+            (Self::Zero, _) => return,
+            (Self::Number { .. }, Self::Infinity(_)) => return,
+            (Self::Infinity(_), Self::Number { .. }) => *self = Self::NaN,
+            // See below
+            (Self::Number { .. }, Self::Number { .. }) => {}
+        }
+
+        if let (
+            Self::Number { m, e },
+            Self::Number {
+                m: other_m,
+                e: other_e,
+            },
+        ) = (self, rhs)
+        {
+            let other_m_normalized = other_m * 10_f64.powi((*other_e - *e) as i32);
+            *m = match other_m_normalized {
+                f64::INFINITY => *m,
+                0.0 => 0.0,
+                value => *m % value,
+            }
+        }
+    }
 }
 
 impl AddAssign for Big {
@@ -488,6 +523,23 @@ impl Div for Big {
     fn div(self, rhs: Self) -> Self::Output {
         let mut result = self.clone();
         result /= rhs;
+        result
+    }
+}
+
+impl RemAssign for Big {
+    fn rem_assign(&mut self, rhs: Self) {
+        self.remainder_mut_unnormalized(&rhs);
+        self.normalize();
+    }
+}
+
+impl Rem for Big {
+    type Output = Big;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        let mut result = self.clone();
+        result %= rhs;
         result
     }
 }
