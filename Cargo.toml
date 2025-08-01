@@ -1,9 +1,12 @@
 [package]
-name = "big_num"
+name = "bignum-ig"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "A Rust implementation for Numbers from ± 10 ^ i64::MIN - 9.999.. * 10 ^ i64::MAX. The Primary Use of this is for Incremental Games."
+repository = "https://github.com/veprogames/big_num"
+license = "LGPL-3.0-only"
+categories = ["mathematics", "game-development"]
 
 [dependencies]
 serde = { version = "1.0.219", features = ["derive"], optional = true }
