@@ -176,3 +176,22 @@ fn comparison() {
     assert_eq!(POS_INFINITY != POS_INFINITY, true);
     assert_eq!(POS_INFINITY == POS_INFINITY, false);
 }
+
+#[test]
+fn parsing() {
+    assert_eq!("1e1".parse(), Ok(b(10)));
+    assert_eq!("1234.56".parse(), Ok(b(1234.56)));
+    assert_eq!("-1.321e3".parse(), Ok(b(-1321)));
+    assert_eq!("0".parse(), Ok(b(0)));
+    assert!("inf".parse::<Big>().unwrap().is_pos_inf());
+    assert!("-inf".parse::<Big>().unwrap().is_neg_inf());
+    assert!("nan".parse::<Big>().unwrap().is_nan());
+}
+
+#[test]
+#[should_panic]
+fn parse_invalid() {
+    "3f4".parse::<Big>().unwrap();
+    "adgkjsfe4".parse::<Big>().unwrap();
+    "3eysdkfjsdf".parse::<Big>().unwrap();
+}
