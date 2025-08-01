@@ -173,8 +173,8 @@ fn comparison() {
     assert!(POS_INFINITY > Big::new(9.9, i64::MAX));
     assert!(NEG_INFINITY < Big::new(9.9, i64::MAX));
     assert!(NEG_INFINITY < POS_INFINITY);
-    assert_eq!(POS_INFINITY != POS_INFINITY, true);
-    assert_eq!(POS_INFINITY == POS_INFINITY, false);
+    assert!(POS_INFINITY != POS_INFINITY);
+    assert!(Big::NaN != Big::NaN);
 }
 
 #[test]

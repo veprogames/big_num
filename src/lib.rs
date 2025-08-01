@@ -349,27 +349,15 @@ impl Big {
     }
 
     pub fn is_nan(&self) -> bool {
-        if let Self::NaN = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::NaN)
     }
 
     pub fn is_pos_inf(&self) -> bool {
-        if let Self::Infinity(InfinityKind::Positive) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Infinity(InfinityKind::Positive))
     }
 
     pub fn is_neg_inf(&self) -> bool {
-        if let Self::Infinity(InfinityKind::Negative) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Infinity(InfinityKind::Negative))
     }
 
     pub fn is_zero(&self) -> bool {
