@@ -10,6 +10,7 @@ mod conversion;
 mod tests;
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Big {
     Number { m: f64, e: i64 },
     NaN,
@@ -18,6 +19,7 @@ pub enum Big {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum InfinityKind {
     Positive,
     Negative,
