@@ -1,3 +1,13 @@
+//! # Big Number
+//!
+//! `bignum-ig` is a crate that supplies a Big Number Type [Big], which allows expressing
+//! much larger or smaller numbers than [prim@f64] can do. This is done through an extra [prim@i64] exponent
+//! field to increase the exponent range.
+//!
+//! [Big] has the same precision as a [prim@f64] and the same floating point arithmetic quirks.
+//! The primary use of this crate is for [Incremental Games](https://en.wikipedia.org/wiki/Incremental_game),
+//! a game genre which can feature very large numbers.
+
 use std::{
     f64,
     fmt::Display,
@@ -9,27 +19,61 @@ mod conversion;
 #[cfg(test)]
 mod tests;
 
+/// # The Big Number Type
+///
+/// A Number in the range of 10<sup>[i64::MIN]</sup>..10.0*10<sup>[i64::MAX]</sup> (exclusive).
+///
+/// # Basic Usage
+///
+/// Create Numbers using [Big::new()] and [Big::from()].
+///
+/// Operate on these numbers with regular operators: +, -, *, /
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Big {
-    Number { m: f64, e: i64 },
+    /// A normal number in the form of Mantissa * 10<sup>Exponent</sup>
+    Number {
+        /// Mantissa, ranging from 1.0 to 10.0 exclusively
+        m: f64,
+        /// Exponent
+        e: i64,
+    },
+    /// Not a Number, never equal to itself
     NaN,
+    /// Positive or Negative Infinity
     Infinity(InfinityKind),
+    /// ± 0
     Zero,
 }
 
+/// This type is used to describe if an Infinity is positive or negative.
+/// You will rarely use it yourself. You should look at [Big::is_pos_inf()] and [Big::is_neg_inf()] instead
+/// There are also [crate::POS_INFINITY] and [crate::NEG_INFINITY] for ease of use.
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum InfinityKind {
+    /// Positive Infinity, also referred to as +inf
     Positive,
+    /// Negative Infinity, also referred to as -inf
     Negative,
 }
 
+/// A Constant Describing Positive Infinity
 pub const POS_INFINITY: Big = Big::Infinity(InfinityKind::Positive);
+/// A Constant Describing Negative Infinity
 pub const NEG_INFINITY: Big = Big::Infinity(InfinityKind::Negative);
 const SIG_DIGITS: i64 = 15;
 
 impl Big {
+    /// Create a new Instance. The Number is normalized automatically.
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// let number = Big::new(1.0, 1);
+    /// assert_eq!(number, Big::new(10.0, 0));
+    /// ```
     pub fn new(mantissa: f64, exponent: i64) -> Self {
         let mut number = Self::Number {
             m: mantissa,
@@ -42,7 +86,7 @@ impl Big {
     /// Create a new Instance, skipping normalization
     ///
     /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
-    /// You will have to call normalize() yourself at some point to prevent bugs.
+    /// You will have to call [Big::normalize()] yourself at some point to prevent bugs.
     ///
     /// You will most likely want to use Big::new or Big::From instead
     pub fn new_unnormalized(mantissa: f64, exponent: i64) -> Self {
@@ -54,7 +98,7 @@ impl Big {
 
     /// Normalize the number so it is in a correct state.
     ///
-    /// **Note:** Unless you used any _unnormalized method, you never need to call this manually.
+    /// **Note:** Unless you used any `_unnormalized` method, you never need to call this manually.
     pub fn normalize(&mut self) {
         match *self {
             Self::Infinity(_) | Self::NaN | Self::Zero => return,
@@ -115,22 +159,32 @@ impl Big {
         }
     }
 
+    /// This will invert the sign of `self`, modifying it in-place.
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// let mut number = Big::from(42);
+    /// number.neg_mut();
+    /// assert_eq!(number, Big::from(-42));
+    /// ```
     pub fn neg_mut(&mut self) {
         // normalization should not be required here
         match self {
             Self::Infinity(InfinityKind::Positive) => *self = NEG_INFINITY,
             Self::Infinity(InfinityKind::Negative) => *self = POS_INFINITY,
             Self::Number { m, .. } => {
-                *m *= 1.0;
+                *m *= -1.0;
             }
             _ => {}
         }
     }
 
-    /// This will add rhs to self without normalizing the result.
+    /// This will add `rhs` to `self` without normalizing the result.
     ///
     /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
-    /// You will have to call normalize() yourself at some point to prevent bugs.
+    /// You will have to call [Big::normalize()] yourself at some point to prevent bugs.
     ///
     /// You will most likely want to use the += or + operator instead, which will normalize the result automatically.
     pub fn add_mut_unnormalized(&mut self, rhs: Self) {
@@ -190,10 +244,10 @@ impl Big {
         };
     }
 
-    /// This will substract rhs from self without normalizing the result.
+    /// This will substract `rhs` from `self` without normalizing the result.
     ///
     /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
-    /// You will have to call normalize() yourself at some point to prevent bugs.
+    /// You will have to call [Big::normalize()] yourself at some point to prevent bugs.
     ///
     /// You will most likely want to use the -= or - operator instead, which will normalize the result automatically.
     pub fn sub_mut_unnormalized(&mut self, rhs: Self) {
@@ -256,10 +310,10 @@ impl Big {
         };
     }
 
-    /// This will multiply rhs onto self without normalizing the result.
+    /// This will multiply `rhs` onto `self` without normalizing the result.
     ///
     /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
-    /// You will have to call normalize() yourself at some point to prevent bugs.
+    /// You will have to call [Big::normalize()] yourself at some point to prevent bugs.
     ///
     /// You will most likely want to use the *= or * operator instead, which will normalize the result automatically.
     pub fn mul_mut_unnormalized(&mut self, rhs: Self) {
@@ -296,10 +350,10 @@ impl Big {
         };
     }
 
-    /// This will divide rhs from self without normalizing the result.
+    /// This will divide `rhs` from `self` without normalizing the result.
     ///
     /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
-    /// You will have to call normalize() yourself at some point to prevent bugs.
+    /// You will have to call [Big::normalize()] yourself at some point to prevent bugs.
     ///
     /// You will most likely want to use the /= or / operator instead, which will normalize the result automatically.
     pub fn div_mut_unnormalized(&mut self, rhs: Self) {
@@ -334,36 +388,98 @@ impl Big {
         };
     }
 
-    /// Take the absolute value of self, modifying it in-place
+    /// Take the absolute value of `self`, modifying it in-place
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// let mut number = Big::from(-42);
+    /// number.abs_mut();
+    /// assert_eq!(number, Big::from(42));
+    /// ```
     pub fn abs_mut(&mut self) {
         if let Self::Number { m, .. } = self {
             *m = m.abs();
         }
     }
 
-    /// Take the absolute value of self, creating a new Instance
+    /// Take the absolute value of `self`, creating a new Instance
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// assert_eq!(Big::from(-42).abs(), Big::from(42));
+    /// assert_eq!(Big::from(42).abs(), Big::from(42));
+    /// ```
     pub fn abs(&self) -> Self {
         let mut result = self.clone();
         result.abs_mut();
         result
     }
 
+    /// Return true if `self` is NaN
+    ///
+    /// Use this method because [Big::NaN] != [Big::NaN]
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// assert!(Big::NaN.is_nan());
+    /// ```
     pub fn is_nan(&self) -> bool {
         matches!(self, Self::NaN)
     }
 
+    /// Return true if `self` is +inf
+    ///
+    /// Use this method because +inf != +inf
+    ///
+    /// # Example
+    /// ```
+    /// assert!(bignum_ig::POS_INFINITY.is_pos_inf());
+    /// ```
     pub fn is_pos_inf(&self) -> bool {
         matches!(self, Self::Infinity(InfinityKind::Positive))
     }
 
+    /// Return true if `self` is -inf
+    ///
+    /// Use this method because -inf != -inf
+    ///
+    /// # Example
+    /// ```
+    /// assert!(bignum_ig::NEG_INFINITY.is_neg_inf());
+    /// ```
     pub fn is_neg_inf(&self) -> bool {
         matches!(self, Self::Infinity(InfinityKind::Negative))
     }
 
+    /// Return true if `self` is Zero
+    ///
+    /// Comparing `self` to [Big::Zero] is also possible
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// assert!(Big::from(0).is_zero());
+    /// ```
     pub fn is_zero(&self) -> bool {
         self == &Big::Zero
     }
 
+    /// Return the logarithm to the base of 10 of `self`
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// let log = Big::from(100).log10();
+    /// assert_eq!(log, 2.0);
+    /// ```
     pub fn log10(self) -> f64 {
         match self {
             Self::Number { m, e } => m.log10() + e as f64,
@@ -373,6 +489,15 @@ impl Big {
         }
     }
 
+    /// Return the natural logarithm of `self`
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// let ln = Big::from(f64::exp(2.0)).ln();
+    /// assert_eq!(ln, 2.0);
+    /// ```
     pub fn ln(self) -> f64 {
         match self.log10() {
             log if log.is_normal() => log / f64::consts::LOG10_E,
@@ -380,6 +505,15 @@ impl Big {
         }
     }
 
+    /// Return the logarithm of any base of `self`
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// let log = Big::from(256).log(16.0);
+    /// assert_eq!(log, 2.0);
+    /// ```
     pub fn log(self, base: f64) -> f64 {
         if base.is_normal() {
             self.ln() / base.ln()
@@ -388,7 +522,16 @@ impl Big {
         }
     }
 
-    /// Raise self to power and modify it in-place.
+    /// Raise `self` to `power` and modify it in-place.
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// let mut number = Big::from(16);
+    /// number.powf_mut(2.0);
+    /// assert_eq!(number, Big::from(256));
+    /// ```
     pub fn powf_mut(&mut self, power: f64) {
         if let Self::Zero = self {
             if power.is_normal() {
@@ -419,17 +562,24 @@ impl Big {
         };
     }
 
-    /// Raise self to power, returning a new Instance
+    /// Raise `self` to `power`, returning a new Instance
+    ///
+    /// # Example
+    /// ```
+    /// use bignum_ig::Big;
+    ///
+    /// assert_eq!(Big::from(16).powf(2.0), Big::from(256));
+    /// ```
     pub fn powf(&self, power: f64) -> Self {
         let mut result = self.clone();
         result.powf_mut(power);
         result
     }
 
-    /// This will put the remainder of self % rhs into self without normalizing the result.
+    /// This will put the remainder of `self` % `rhs` into `self` without normalizing the result.
     ///
     /// **Caution:** Only use this if you are absolutely sure of what you are doing and need every bit of performance!
-    /// You will have to call normalize() yourself at some point to prevent bugs.
+    /// You will have to call [Big::normalize()] yourself at some point to prevent bugs.
     ///
     /// You will most likely want to use the %= or % operator instead, which will normalize the result automatically.
     pub fn remainder_mut_unnormalized(&mut self, rhs: &Big) {
