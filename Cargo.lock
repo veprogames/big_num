@@ -3,7 +3,7 @@
 version = 3
 
 [[package]]
-name = "big_num"
+name = "bignum-ig"
 version = "0.1.0"
 dependencies = [
  "serde",
