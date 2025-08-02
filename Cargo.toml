@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 description = "A Rust implementation for Numbers from ± 10 ^ i64::MIN - 9.999.. * 10 ^ i64::MAX. The Primary Use of this is for Incremental Games."
-repository = "https://github.com/veprogames/big_num"
+repository = "https://github.com/veprogames/bignum-ig"
 license = "LGPL-3.0-only"
 categories = ["mathematics", "game-development"]
 
