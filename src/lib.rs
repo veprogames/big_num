@@ -11,7 +11,7 @@
 use std::{
     f64,
     fmt::Display,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign},
 };
 
 mod comparison;
@@ -693,6 +693,16 @@ impl Rem for Big {
     fn rem(self, rhs: Self) -> Self::Output {
         let mut result = self.clone();
         result %= rhs;
+        result
+    }
+}
+
+impl Neg for Big {
+    type Output = Big;
+
+    fn neg(self) -> Self::Output {
+        let mut result = self.clone();
+        result.neg_mut();
         result
     }
 }

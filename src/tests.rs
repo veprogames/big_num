@@ -167,6 +167,14 @@ fn remainder() {
 }
 
 #[test]
+fn negation() {
+    assert_eq!(-b(42), b(-42));
+    assert!((-Big::NaN).is_nan());
+    assert!((-POS_INFINITY).is_neg_inf());
+    assert!((-NEG_INFINITY).is_pos_inf());
+}
+
+#[test]
 fn comparison() {
     assert!(b(11) > b(9));
     assert!(b(-5) < b(4));
