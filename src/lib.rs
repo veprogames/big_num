@@ -16,6 +16,8 @@ use std::{
 
 mod comparison;
 mod conversion;
+#[cfg(feature = "fmt")]
+mod fmt;
 #[cfg(test)]
 mod tests;
 
