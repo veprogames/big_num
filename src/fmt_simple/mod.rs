@@ -1,5 +1,8 @@
 use crate::{Big, SIG_DIGITS};
 
+#[cfg(test)]
+mod tests;
+
 impl Big {
     /// Formats the number in the format of number.places
     ///

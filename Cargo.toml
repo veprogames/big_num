@@ -1,19 +1,19 @@
 [package]
 name = "bignum-ig"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 description = "A Rust implementation for Numbers from ± 10 ^ i64::MIN - 9.999.. * 10 ^ i64::MAX. The Primary Use of this is for Incremental Games."
 repository = "https://github.com/veprogames/bignum-ig"
 license = "LGPL-3.0-only"
 categories = ["mathematics", "game-development"]
+keywords = ["gamedev", "math", "library", "incremental", "big-number"]
 
 [lints.rust]
 missing_docs = "warn"
 
 [dependencies]
-serde = { version = "1.0.219", features = ["derive"], optional = true }
+serde = { version = "1.0.219", features = ["derive"], default-features = false, optional = true }
 
 [features]
 serde = ["dep:serde"]
-fmt = []
